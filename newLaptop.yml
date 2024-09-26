@@ -1,0 +1,59 @@
+---
+- name: Setup new laptop for development
+  hosts: localhost
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Ensure Homebrew is installed (for macOS)
+      when: ansible_os_family == "Darwin"
+      command: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    - name: Ensure Homebrew is installed (for Linux)
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+      command: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    - name: Install required packages
+      become_user: "{{ ansible_user }}"
+      become: yes
+      vars:
+        packages:
+          - python3
+          - nodejs # For JavaScript
+          - docker
+          - firefox
+
+      package:
+        name: "{{ item }}"
+        state: present
+      with_items: "{{ packages }}"
+      when: ansible_os_family == "Darwin" or ansible_distribution in ['Ubuntu', 'CentOS']
+
+    - name: Install Kubernetes (kubectl) on macOS
+      when: ansible_os_family == "Darwin"
+      homebrew:
+        name: kubernetes-cli
+
+    - name: Install Kubernetes (kubectl) on Linux
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+      command: curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/{{ ansible_system | lower }}/amd64/kubectl" && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+
+    - name: Install Zsh shell
+      become_user: "{{ ansible_user }}"
+      become: yes
+      command: sudo apt-get install -y zsh
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: Set Zsh as default shell
+      become_user: "{{ ansible_user }}"
+      become: yes
+      command: chsh -s /bin/zsh "{{ ansible_user }}"
+      when: ansible_os_family == "Darwin"
+
+    - name: Add alias for kubectl (alias k=kubectl)
+      become_user: "{{ ansible_user }}"
+      become: yes
+      lineinfile:
+        dest: "{{ ansible_user_dir }}/.zshrc"
+        line: "alias k=kubectl"
+      when: ansible_os_family == "Darwin" or ansible_os_family == "Debian" or ansible_os_family == "RedHat"
